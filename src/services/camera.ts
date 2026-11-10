@@ -1,21 +1,28 @@
 import type { CameraView } from 'expo-camera';
 import * as ImageManipulator from 'expo-image-manipulator';
 
-import { INFERENCE_WIDTH } from '../constants/labels';
+import { INFERENCE_WIDTH, LIVE_INFERENCE_WIDTH } from '../constants/labels';
 
 export type CapturedFrame = {
+  uri: string;
   base64: string;
   width: number;
   height: number;
 };
 
-export async function captureInferenceFrame(
+async function captureAndResize(
   camera: CameraView,
+  options: {
+    quality: number;
+    skipProcessing: boolean;
+    resizeWidth: number;
+    compress: number;
+  },
 ): Promise<CapturedFrame | null> {
   const photo = await camera.takePictureAsync({
-    quality: 0.45,
+    quality: options.quality,
     base64: false,
-    skipProcessing: true,
+    skipProcessing: options.skipProcessing,
     shutterSound: false,
   });
 
@@ -25,9 +32,9 @@ export async function captureInferenceFrame(
 
   const resized = await ImageManipulator.manipulateAsync(
     photo.uri,
-    [{ resize: { width: INFERENCE_WIDTH } }],
+    [{ resize: { width: options.resizeWidth } }],
     {
-      compress: 0.65,
+      compress: options.compress,
       format: ImageManipulator.SaveFormat.JPEG,
       base64: true,
     },
@@ -38,8 +45,33 @@ export async function captureInferenceFrame(
   }
 
   return {
+    uri: resized.uri,
     base64: resized.base64,
     width: resized.width,
     height: resized.height,
   };
+}
+
+/** Foto única: mejor calidad y orientación correcta. */
+export async function captureScanPhoto(
+  camera: CameraView,
+): Promise<CapturedFrame | null> {
+  return captureAndResize(camera, {
+    quality: 0.7,
+    skipProcessing: false,
+    resizeWidth: INFERENCE_WIDTH,
+    compress: 0.82,
+  });
+}
+
+/** Frame en vivo: más rápido y ligero. */
+export async function captureLiveFrame(
+  camera: CameraView,
+): Promise<CapturedFrame | null> {
+  return captureAndResize(camera, {
+    quality: 0.4,
+    skipProcessing: true,
+    resizeWidth: LIVE_INFERENCE_WIDTH,
+    compress: 0.6,
+  });
 }

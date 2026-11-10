@@ -33,9 +33,14 @@ export function toDetections(
   predictions: RawPrediction[],
   imageWidth: number,
   imageHeight: number,
+  minScore: number = MIN_SCORE,
 ): Detection[] {
+  if (imageWidth <= 0 || imageHeight <= 0) {
+    return [];
+  }
+
   return predictions
-    .filter((prediction) => isTargetClass(prediction.class) && prediction.score >= MIN_SCORE)
+    .filter((prediction) => isTargetClass(prediction.class) && prediction.score >= minScore)
     .sort((a, b) => b.score - a.score)
     .slice(0, MAX_DETECTIONS)
     .map((prediction, index) => {
@@ -63,4 +68,12 @@ function clamp(value: number, min: number, max: number) {
 
 export function formatPercent(score: number) {
   return `${Math.round(score * 100)}%`;
+}
+
+export function formatElapsed(ms: number) {
+  return `${(ms / 1000).toFixed(1)} s`;
+}
+
+export function formatObjectCount(count: number) {
+  return count === 1 ? '1 objeto' : `${count} objetos`;
 }

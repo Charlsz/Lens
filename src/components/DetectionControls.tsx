@@ -1,52 +1,95 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import type { AppPhase } from '../hooks/useObjectDetection';
+
 type Props = {
-  isDetecting: boolean;
+  phase: AppPhase;
   disabled: boolean;
-  showBoxes: boolean;
-  objectCount: number;
-  onToggle: () => void;
-  onToggleBoxes: () => void;
+  onPhotoScan: () => void;
+  onStartLive: () => void;
+  onStopLive: () => void;
+  onReset: () => void;
 };
 
 export function DetectionControls({
-  isDetecting,
+  phase,
   disabled,
-  showBoxes,
-  objectCount,
-  onToggle,
-  onToggleBoxes,
+  onPhotoScan,
+  onStartLive,
+  onStopLive,
+  onReset,
 }: Props) {
+  if (phase === 'live') {
+    return (
+      <View style={styles.row}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={onStopLive}
+          style={({ pressed }) => [styles.stopButton, pressed && styles.pressed]}
+        >
+          <Text style={styles.stopLabel}>Detener en vivo</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  if (phase === 'result') {
+    return (
+      <View style={styles.row}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={onReset}
+          style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed]}
+        >
+          <Text style={styles.primaryLabel}>Nueva foto</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          disabled={disabled}
+          onPress={onStartLive}
+          style={({ pressed }) => [
+            styles.secondaryButton,
+            disabled && styles.disabled,
+            pressed && !disabled && styles.pressed,
+          ]}
+        >
+          <Text style={styles.secondaryLabel}>En vivo</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  const busy = phase === 'scanning' || phase === 'loading';
+
   return (
     <View style={styles.row}>
       <Pressable
         accessibilityRole="button"
-        disabled={disabled}
-        onPress={onToggle}
+        disabled={disabled || busy}
+        onPress={onPhotoScan}
         style={({ pressed }) => [
           styles.primaryButton,
-          isDetecting && styles.primaryButtonActive,
-          disabled && styles.disabled,
-          pressed && !disabled && styles.pressed,
+          (disabled || busy) && styles.disabled,
+          pressed && !disabled && !busy && styles.pressed,
         ]}
       >
-        <Text style={[styles.primaryLabel, isDetecting && styles.primaryLabelActive]}>
-          {isDetecting ? 'Stop' : 'Start'}
+        <Text style={styles.primaryLabel}>
+          {phase === 'scanning' ? 'Escaneando…' : 'Tomar foto'}
         </Text>
       </Pressable>
 
       <Pressable
         accessibilityRole="button"
-        onPress={onToggleBoxes}
-        style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}
+        disabled={disabled || busy}
+        onPress={onStartLive}
+        style={({ pressed }) => [
+          styles.secondaryButton,
+          (disabled || busy) && styles.disabled,
+          pressed && !disabled && !busy && styles.pressed,
+        ]}
       >
-        <Text style={styles.secondaryLabel}>{showBoxes ? 'Hide boxes' : 'Show boxes'}</Text>
+        <Text style={styles.secondaryLabel}>En vivo</Text>
       </Pressable>
-
-      <View style={styles.counter}>
-        <Text style={styles.counterValue}>{objectCount}</Text>
-        <Text style={styles.counterLabel}>objects</Text>
-      </View>
     </View>
   );
 }
@@ -58,57 +101,49 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   primaryButton: {
-    flex: 1.2,
-    height: 52,
+    flex: 1.25,
+    height: 56,
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F4FFF8',
-  },
-  primaryButtonActive: {
-    backgroundColor: '#FF6B6B',
+    backgroundColor: '#7CFFB2',
+    paddingHorizontal: 10,
   },
   primaryLabel: {
     color: '#0B1210',
     fontFamily: 'DMSans_700Bold',
-    fontSize: 16,
-  },
-  primaryLabelActive: {
-    color: '#FFF8F8',
+    fontSize: 15,
+    textAlign: 'center',
   },
   secondaryButton: {
-    height: 52,
-    paddingHorizontal: 14,
+    flex: 1,
+    height: 56,
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.08)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
+    borderColor: 'rgba(255,255,255,0.14)',
+    paddingHorizontal: 10,
   },
   secondaryLabel: {
-    color: '#E7F2EC',
-    fontFamily: 'DMSans_500Medium',
-    fontSize: 13,
+    color: '#F4FFF8',
+    fontFamily: 'DMSans_700Bold',
+    fontSize: 15,
+    textAlign: 'center',
   },
-  counter: {
-    minWidth: 64,
-    height: 52,
+  stopButton: {
+    flex: 1,
+    height: 56,
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: '#FF6B6B',
   },
-  counterValue: {
-    color: '#F4FFF8',
+  stopLabel: {
+    color: '#FFF8F8',
     fontFamily: 'DMSans_700Bold',
-    fontSize: 18,
-    lineHeight: 20,
-  },
-  counterLabel: {
-    color: 'rgba(244,255,248,0.62)',
-    fontFamily: 'DMSans_400Regular',
-    fontSize: 11,
+    fontSize: 16,
   },
   disabled: {
     opacity: 0.45,

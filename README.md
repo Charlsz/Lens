@@ -1,17 +1,28 @@
 # Lens
 
-On-device object detection with Expo Go. Point the camera at everyday objects and Lens draws labels and boxes on the live preview.
+Reconocimiento de objetos con Edge AI en una aplicación móvil.
 
-Works offline after install. All inference runs on the phone.
+Dos modos:
+- **Tomar foto**: captura una imagen y corre el modelo una vez
+- **En vivo**: analiza frames de la cámara en bucle hasta que detienes
 
-## Run
+Todo corre en el dispositivo (sin nube).
+
+## Ejecutar
 
 ```bash
 npm install
 npx expo start
 ```
 
-Scan the QR code with Expo Go on iPhone or Android.
+Escanea el QR con Expo Go (misma cuenta Expo en CLI y en la app).
+
+## Verificar
+
+```bash
+npm run typecheck
+npm test
+```
 
 ## Stack
 
@@ -20,20 +31,6 @@ Scan the QR code with Expo Go on iPhone or Android.
 - TensorFlow.js (CPU) + COCO-SSD lite MobileNet
 - Expo Router
 
-TensorFlow Lite / YOLO need a custom native build, so this project uses TensorFlow.js instead and stays compatible with Expo Go.
+## Objetos detectados
 
-## Detected objects
-
-Person, phone, bottle, laptop, book, cup, backpack, chair.
-
-## Project layout
-
-```text
-src/
-  app/           screens
-  components/    camera UI
-  hooks/         detection loop
-  services/      camera + model
-  utils/         box helpers
-assets/model/    local COCO-SSD weights
-```
+Persona, teléfono, botella, portátil, libro, taza, mochila, silla.

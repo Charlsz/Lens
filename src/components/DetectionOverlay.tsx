@@ -9,7 +9,7 @@ type Props = {
 };
 
 export function DetectionOverlay({ detections, visible }: Props) {
-  if (!visible) {
+  if (!visible || detections.length === 0) {
     return null;
   }
 

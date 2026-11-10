@@ -6,6 +6,7 @@ import * as jpeg from 'jpeg-js';
 
 import type { Detection, RawPrediction } from '../utils/detection';
 import { toDetections } from '../utils/detection';
+import { ensureTfPlatform } from './tfPlatform';
 
 // COCO label map used by the SSD model (same as @tensorflow-models/coco-ssd).
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -34,27 +35,48 @@ type GraphModelJSON = {
   }>;
 };
 
+export type ProgressUpdate = {
+  message: string;
+  percent: number;
+};
+
+type ProgressCallback = (update: ProgressUpdate) => void;
+
 let graphModel: tf.GraphModel | null = null;
 let readyPromise: Promise<void> | null = null;
 
-export async function prepareDetector(): Promise<void> {
+export async function prepareDetector(onProgress?: ProgressCallback): Promise<void> {
   if (graphModel) {
+    onProgress?.({ message: 'Modelo listo en el dispositivo', percent: 30 });
     return;
   }
 
   if (!readyPromise) {
     readyPromise = (async () => {
+      onProgress?.({ message: 'Inicializando TensorFlow.js…', percent: 4 });
+      ensureTfPlatform();
       await tf.setBackend('cpu');
       await tf.ready();
 
-      const modelDir = await ensureLocalModel();
+      onProgress?.({ message: 'Preparando archivos del modelo…', percent: 10 });
+      const modelDir = await ensureLocalModel((copied, total) => {
+        const shardPercent = 10 + Math.round((copied / total) * 12);
+        onProgress?.({
+          message: `Copiando pesos del modelo (${copied}/${total})…`,
+          percent: shardPercent,
+        });
+      });
+
+      onProgress?.({ message: 'Cargando modelo Edge AI en memoria…', percent: 24 });
       graphModel = await loadGraphModelFromDirectory(modelDir);
 
-      // Warm up once so the first real frame is faster.
+      onProgress?.({ message: 'Calentando modelo (primera inferencia)…', percent: 28 });
       const warm = tf.zeros([1, 300, 300, 3], 'int32');
       const warmResult = (await graphModel.executeAsync(warm)) as tf.Tensor[];
       warmResult.forEach((tensor) => tensor.dispose());
       warm.dispose();
+
+      onProgress?.({ message: 'Modelo listo en el dispositivo', percent: 30 });
     })().catch((error) => {
       readyPromise = null;
       throw error;
@@ -68,27 +90,48 @@ export function isDetectorReady() {
   return graphModel !== null;
 }
 
-export async function detectObjects(base64: string): Promise<{
+export async function detectObjects(
+  base64: string,
+  options?: {
+    onProgress?: ProgressCallback;
+    minScore?: number;
+    quiet?: boolean;
+  },
+): Promise<{
   detections: Detection[];
   inferenceMs: number;
   imageWidth: number;
   imageHeight: number;
 }> {
-  await prepareDetector();
+  const onProgress = options?.onProgress;
+  const quiet = options?.quiet === true;
+
+  await prepareDetector(quiet ? undefined : onProgress);
 
   if (!graphModel) {
-    throw new Error('Model is not ready');
+    throw new Error('El modelo no está listo');
   }
 
+  if (!quiet) {
+    onProgress?.({ message: 'Decodificando imagen…', percent: 62 });
+  }
   const { tensor, width, height } = imageToTensor(base64);
   const started = Date.now();
 
   try {
-    const predictions = await runDetection(graphModel, tensor, 20, 0.3);
+    if (!quiet) {
+      onProgress?.({ message: 'Ejecutando reconocimiento Edge AI…', percent: 72 });
+    }
+    const predictions = await runDetection(graphModel, tensor, 20, 0.25);
     const inferenceMs = Date.now() - started;
 
+    if (!quiet) {
+      onProgress?.({ message: 'Filtrando detecciones…', percent: 92 });
+    }
+    const detections = toDetections(predictions, width, height, options?.minScore);
+
     return {
-      detections: toDetections(predictions, width, height),
+      detections,
       inferenceMs,
       imageWidth: width,
       imageHeight: height,
@@ -198,7 +241,9 @@ function imageToTensor(base64: string) {
   };
 }
 
-async function ensureLocalModel(): Promise<Directory> {
+async function ensureLocalModel(
+  onShardProgress?: (copied: number, total: number) => void,
+): Promise<Directory> {
   const modelDir = new Directory(Paths.document, 'lens-model');
   const modelFile = new File(modelDir, 'model.json');
 
@@ -212,24 +257,26 @@ async function ensureLocalModel(): Promise<Directory> {
   }
 
   const assets = await Asset.loadAsync([...SHARD_MODULES]);
+  let copied = 0;
 
   for (let index = 0; index < assets.length; index += 1) {
     const asset = assets[index];
     const shardName = `group1-shard${index + 1}of5`;
     const destination = new File(modelDir, shardName);
 
-    if (destination.exists) {
-      continue;
+    if (!destination.exists) {
+      await asset.downloadAsync();
+
+      if (!asset.localUri) {
+        throw new Error(`Falta el fragmento del modelo: ${shardName}`);
+      }
+
+      const source = new File(asset.localUri);
+      await source.copy(destination);
     }
 
-    await asset.downloadAsync();
-
-    if (!asset.localUri) {
-      throw new Error(`Missing model shard: ${shardName}`);
-    }
-
-    const source = new File(asset.localUri);
-    await source.copy(destination);
+    copied += 1;
+    onShardProgress?.(copied, assets.length);
   }
 
   return modelDir;

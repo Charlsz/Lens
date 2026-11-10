@@ -1,12 +1,7 @@
 import { useRef, useState } from 'react';
-import {
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CameraPreview } from '../components/CameraPreview';
 import { DetectionControls } from '../components/DetectionControls';
@@ -15,67 +10,68 @@ import { useObjectDetection } from '../hooks/useObjectDetection';
 
 export default function HomeScreen() {
   const cameraRef = useRef<CameraView>(null);
+  const insets = useSafeAreaInsets();
   const [permission, requestPermission] = useCameraPermissions();
   const [cameraReady, setCameraReady] = useState(false);
 
   const {
-    status,
+    phase,
     errorMessage,
-    isDetecting,
-    showBoxes,
     detections,
+    photoUri,
     stats,
-    startDetection,
-    stopDetection,
-    toggleBoxes,
+    runPhotoScan,
+    startLive,
+    stopLive,
+    resetToCamera,
   } = useObjectDetection(cameraRef);
 
   const permissionGranted = permission?.granted === true;
-  const controlsDisabled = !permissionGranted || !cameraReady || status === 'loading' || status === 'error';
+  const controlsDisabled =
+    !permissionGranted ||
+    !cameraReady ||
+    phase === 'loading' ||
+    phase === 'scanning';
 
   return (
     <View style={styles.root}>
-      <View style={styles.glowA} />
-      <View style={styles.glowB} />
-
-      <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>
+      <View style={styles.preview}>
         <CameraPreview
           cameraRef={cameraRef}
           permissionGranted={permissionGranted}
-          isDetecting={isDetecting}
-          modelLoading={status === 'loading'}
+          phase={phase}
+          photoUri={photoUri}
           detections={detections}
-          showBoxes={showBoxes}
+          progressPercent={stats.progressPercent}
+          statusMessage={stats.statusMessage}
           onCameraReady={() => setCameraReady(true)}
         />
+      </View>
 
-        <View style={styles.bottom}>
-          {!permissionGranted ? (
-            <Pressable style={styles.permissionButton} onPress={() => void requestPermission()}>
-              <Text style={styles.permissionLabel}>Enable camera</Text>
-            </Pressable>
-          ) : null}
+      <View style={[styles.bottom, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+        {!permissionGranted ? (
+          <Pressable style={styles.permissionButton} onPress={() => void requestPermission()}>
+            <Text style={styles.permissionLabel}>Activar cámara</Text>
+          </Pressable>
+        ) : null}
 
-          {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+        {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
 
-          <PerformanceInfo stats={stats} />
+        <PerformanceInfo stats={stats} />
 
-          <DetectionControls
-            isDetecting={isDetecting}
-            disabled={controlsDisabled}
-            showBoxes={showBoxes}
-            objectCount={stats.objectCount}
-            onToggle={() => {
-              if (isDetecting) {
-                stopDetection();
-              } else {
-                startDetection();
-              }
-            }}
-            onToggleBoxes={toggleBoxes}
-          />
-        </View>
-      </SafeAreaView>
+        <DetectionControls
+          phase={phase}
+          disabled={controlsDisabled}
+          onPhotoScan={() => {
+            void runPhotoScan();
+          }}
+          onStartLive={() => {
+            void startLive();
+          }}
+          onStopLive={stopLive}
+          onReset={resetToCamera}
+        />
+      </View>
     </View>
   );
 }
@@ -85,33 +81,16 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#07100D',
   },
-  glowA: {
-    position: 'absolute',
-    width: 280,
-    height: 280,
-    borderRadius: 280,
-    backgroundColor: 'rgba(124,255,178,0.08)',
-    top: -60,
-    right: -40,
-  },
-  glowB: {
-    position: 'absolute',
-    width: 220,
-    height: 220,
-    borderRadius: 220,
-    backgroundColor: 'rgba(90,160,255,0.08)',
-    bottom: 40,
-    left: -70,
-  },
-  safe: {
+  preview: {
     flex: 1,
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 12,
-    gap: 14,
   },
   bottom: {
     gap: 12,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    backgroundColor: '#07100D',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.06)',
   },
   permissionButton: {
     height: 48,

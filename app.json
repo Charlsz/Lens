@@ -7,15 +7,10 @@
     "icon": "./assets/icon.png",
     "scheme": "lens",
     "userInterfaceStyle": "dark",
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#07100D"
-    },
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSCameraUsageDescription": "Lens uses the camera to recognize objects on your device."
+        "NSCameraUsageDescription": "Lens usa la cámara para reconocer objetos en el dispositivo con Edge AI."
       }
     },
     "android": {
@@ -25,7 +20,9 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "permissions": ["CAMERA"],
+      "permissions": [
+        "CAMERA"
+      ],
       "predictiveBackGestureEnabled": false
     },
     "web": {
@@ -38,10 +35,18 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Lens uses the camera to recognize objects on your device.",
+          "cameraPermission": "Lens usa la cámara para reconocer objetos en el dispositivo con Edge AI.",
           "microphonePermission": false,
           "recordAudioAndroid": false,
           "barcodeScannerEnabled": false
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#07100D",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200
         }
       ]
     ]

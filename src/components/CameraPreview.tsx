@@ -1,117 +1,95 @@
-import { useEffect, useRef, type RefObject } from 'react';
-import { ActivityIndicator, Animated, Easing, StyleSheet, Text, View } from 'react-native';
+import { type RefObject } from 'react';
+import {
+  ActivityIndicator,
+  Image,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { CameraView } from 'expo-camera';
 
+import type { AppPhase } from '../hooks/useObjectDetection';
 import type { Detection } from '../utils/detection';
 import { DetectionOverlay } from './DetectionOverlay';
+
+const FILL = {
+  position: 'absolute' as const,
+  top: 0,
+  right: 0,
+  bottom: 0,
+  left: 0,
+};
 
 type Props = {
   cameraRef: RefObject<CameraView | null>;
   permissionGranted: boolean;
-  isDetecting: boolean;
-  modelLoading: boolean;
+  phase: AppPhase;
+  photoUri: string | null;
   detections: Detection[];
-  showBoxes: boolean;
+  progressPercent: number;
+  statusMessage: string;
   onCameraReady?: () => void;
 };
 
 export function CameraPreview({
   cameraRef,
   permissionGranted,
-  isDetecting,
-  modelLoading,
+  phase,
+  photoUri,
   detections,
-  showBoxes,
+  progressPercent,
+  statusMessage,
   onCameraReady,
 }: Props) {
-  const scanAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    if (!isDetecting) {
-      scanAnim.stopAnimation();
-      scanAnim.setValue(0);
-      return;
-    }
-
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(scanAnim, {
-          toValue: 1,
-          duration: 1600,
-          easing: Easing.inOut(Easing.quad),
-          useNativeDriver: true,
-        }),
-        Animated.timing(scanAnim, {
-          toValue: 0,
-          duration: 1600,
-          easing: Easing.inOut(Easing.quad),
-          useNativeDriver: true,
-        }),
-      ]),
-    );
-
-    loop.start();
-    return () => loop.stop();
-  }, [isDetecting, scanAnim]);
-
   if (!permissionGranted) {
     return (
       <View style={styles.fallback}>
-        <Text style={styles.fallbackTitle}>Camera access needed</Text>
-        <Text style={styles.fallbackBody}>Allow camera access to start recognizing objects.</Text>
+        <Text style={styles.fallbackTitle}>Se necesita la cámara</Text>
+        <Text style={styles.fallbackBody}>
+          Permite el acceso a la cámara para reconocer objetos con Edge AI.
+        </Text>
       </View>
     );
   }
+
+  const showPhoto = Boolean(photoUri) && (phase === 'result' || phase === 'scanning');
+  const showScanningOverlay = phase === 'scanning' || phase === 'loading';
+  const showLiveOverlay = phase === 'live';
 
   return (
     <View style={styles.frame}>
       <CameraView
         ref={cameraRef}
-        style={StyleSheet.absoluteFill}
+        style={[FILL, showPhoto && styles.hiddenCamera]}
         facing="back"
         mode="picture"
         animateShutter={false}
         onCameraReady={onCameraReady}
       />
 
-      <DetectionOverlay detections={detections} visible={showBoxes && isDetecting} />
+      {showPhoto && photoUri ? (
+        <Image source={{ uri: photoUri }} style={FILL} resizeMode="cover" />
+      ) : null}
+
+      <DetectionOverlay
+        detections={detections}
+        visible={phase === 'result' || phase === 'live'}
+      />
 
       <View style={styles.topRow}>
         <Text style={styles.brand}>Lens</Text>
-        <View style={[styles.badge, isDetecting ? styles.badgeLive : styles.badgeIdle]}>
-          <View style={[styles.dot, isDetecting ? styles.dotLive : styles.dotIdle]} />
-          <Text style={styles.badgeText}>{isDetecting ? 'Live' : 'Paused'}</Text>
+        <View style={[styles.badge, showLiveOverlay ? styles.badgeLive : null]}>
+          <Text style={[styles.badgeText, showLiveOverlay ? styles.badgeTextLive : null]}>
+            {showLiveOverlay ? 'En vivo' : 'Edge AI'}
+          </Text>
         </View>
       </View>
 
-      {modelLoading ? (
+      {showScanningOverlay ? (
         <View style={styles.loading}>
           <ActivityIndicator color="#7CFFB2" />
-          <Text style={styles.loadingText}>Loading model</Text>
-        </View>
-      ) : null}
-
-      {isDetecting ? (
-        <View style={styles.scanArea} pointerEvents="none">
-          <Animated.View
-            style={[
-              styles.scanLine,
-              {
-                transform: [
-                  {
-                    translateY: scanAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [0, 220],
-                    }),
-                  },
-                ],
-                opacity: scanAnim.interpolate({
-                  inputRange: [0, 0.5, 1],
-                  outputRange: [0.35, 1, 0.35],
-                }),
-              },
-            ]}
-          />
+          <Text style={styles.loadingText}>{statusMessage}</Text>
+          <Text style={styles.loadingPercent}>{progressPercent}%</Text>
         </View>
       ) : null}
     </View>
@@ -122,20 +100,14 @@ const styles = StyleSheet.create({
   frame: {
     flex: 1,
     overflow: 'hidden',
-    borderRadius: 28,
     backgroundColor: '#0B1210',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
   },
   fallback: {
     flex: 1,
-    borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 24,
     backgroundColor: '#121A17',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
   },
   fallbackTitle: {
     color: '#F4FFF8',
@@ -169,64 +141,44 @@ const styles = StyleSheet.create({
     textShadowRadius: 8,
   },
   badge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
     paddingHorizontal: 10,
     paddingVertical: 7,
     borderRadius: 999,
     backgroundColor: 'rgba(10, 14, 12, 0.72)',
-  },
-  badgeLive: {
     borderWidth: 1,
     borderColor: 'rgba(124,255,178,0.35)',
   },
-  badgeIdle: {
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
+  badgeLive: {
+    borderColor: 'rgba(255,107,107,0.55)',
   },
   badgeText: {
-    color: '#F4FFF8',
-    fontFamily: 'DMSans_500Medium',
+    color: '#7CFFB2',
+    fontFamily: 'DMSans_600SemiBold',
     fontSize: 12,
   },
-  dot: {
-    width: 7,
-    height: 7,
-    borderRadius: 999,
+  badgeTextLive: {
+    color: '#FF8E8E',
   },
-  dotLive: {
-    backgroundColor: '#7CFFB2',
-  },
-  dotIdle: {
-    backgroundColor: 'rgba(244,255,248,0.35)',
+  hiddenCamera: {
+    opacity: 0,
   },
   loading: {
-    ...StyleSheet.absoluteFill,
+    ...FILL,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(8, 12, 10, 0.55)',
+    backgroundColor: 'rgba(8, 12, 10, 0.62)',
     gap: 10,
+    paddingHorizontal: 28,
   },
   loadingText: {
     color: '#F4FFF8',
     fontFamily: 'DMSans_500Medium',
     fontSize: 14,
+    textAlign: 'center',
   },
-  scanArea: {
-    position: 'absolute',
-    left: 28,
-    right: 28,
-    top: '28%',
-    height: 220,
-  },
-  scanLine: {
-    height: 2,
-    borderRadius: 999,
-    backgroundColor: 'rgba(124,255,178,0.9)',
-    shadowColor: '#7CFFB2',
-    shadowOpacity: 0.85,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 0 },
+  loadingPercent: {
+    color: '#7CFFB2',
+    fontFamily: 'DMSans_700Bold',
+    fontSize: 18,
   },
 });
