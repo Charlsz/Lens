@@ -6,6 +6,7 @@ import * as jpeg from 'jpeg-js';
 
 import type { Detection, RawPrediction } from '../utils/detection';
 import { toDetections } from '../utils/detection';
+import { formatBytes, type ProgressTracker } from '../utils/progress';
 import { ensureTfPlatform } from './tfPlatform';
 
 // COCO label map used by the SSD model (same as @tensorflow-models/coco-ssd).
@@ -35,48 +36,48 @@ type GraphModelJSON = {
   }>;
 };
 
-export type ProgressUpdate = {
-  message: string;
-  percent: number;
-};
-
-type ProgressCallback = (update: ProgressUpdate) => void;
-
 let graphModel: tf.GraphModel | null = null;
 let readyPromise: Promise<void> | null = null;
 
-export async function prepareDetector(onProgress?: ProgressCallback): Promise<void> {
+export async function prepareDetector(tracker?: ProgressTracker): Promise<void> {
   if (graphModel) {
-    onProgress?.({ message: 'Modelo listo en el dispositivo', percent: 30 });
     return;
   }
 
   if (!readyPromise) {
     readyPromise = (async () => {
-      onProgress?.({ message: 'Inicializando TensorFlow.js…', percent: 4 });
+      tracker?.begin('tf_init', 'Inicializando TensorFlow.js…');
       ensureTfPlatform();
       await tf.setBackend('cpu');
       await tf.ready();
+      tracker?.complete('TensorFlow.js listo');
 
-      onProgress?.({ message: 'Preparando archivos del modelo…', percent: 10 });
-      const modelDir = await ensureLocalModel((copied, total) => {
-        const shardPercent = 10 + Math.round((copied / total) * 12);
-        onProgress?.({
-          message: `Copiando pesos del modelo (${copied}/${total})…`,
-          percent: shardPercent,
-        });
+      tracker?.begin('copy_shards', 'Preparando archivos del modelo…');
+      const modelDir = await ensureLocalModel((copied, total, reused) => {
+        tracker?.setFraction(
+          copied / total,
+          reused
+            ? `Pesos en caché (${copied}/${total})`
+            : `Copiando pesos del modelo (${copied}/${total})…`,
+        );
       });
+      tracker?.complete('Archivos del modelo listos');
 
-      onProgress?.({ message: 'Cargando modelo Edge AI en memoria…', percent: 24 });
-      graphModel = await loadGraphModelFromDirectory(modelDir);
+      tracker?.begin('load_weights', 'Cargando modelo Edge AI en memoria…');
+      graphModel = await loadGraphModelFromDirectory(modelDir, (readBytes, totalBytes) => {
+        tracker?.setFraction(
+          totalBytes > 0 ? readBytes / totalBytes : 0,
+          `Cargando pesos ${formatBytes(readBytes)} / ${formatBytes(totalBytes)}`,
+        );
+      });
+      tracker?.complete('Modelo cargado en memoria');
 
-      onProgress?.({ message: 'Calentando modelo (primera inferencia)…', percent: 28 });
+      tracker?.begin('warmup', 'Calentando modelo (primera inferencia)…');
       const warm = tf.zeros([1, 300, 300, 3], 'int32');
       const warmResult = (await graphModel.executeAsync(warm)) as tf.Tensor[];
       warmResult.forEach((tensor) => tensor.dispose());
       warm.dispose();
-
-      onProgress?.({ message: 'Modelo listo en el dispositivo', percent: 30 });
+      tracker?.complete('Calentamiento terminado');
     })().catch((error) => {
       readyPromise = null;
       throw error;
@@ -93,9 +94,8 @@ export function isDetectorReady() {
 export async function detectObjects(
   base64: string,
   options?: {
-    onProgress?: ProgressCallback;
+    tracker?: ProgressTracker;
     minScore?: number;
-    quiet?: boolean;
   },
 ): Promise<{
   detections: Detection[];
@@ -103,32 +103,35 @@ export async function detectObjects(
   imageWidth: number;
   imageHeight: number;
 }> {
-  const onProgress = options?.onProgress;
-  const quiet = options?.quiet === true;
+  const tracker = options?.tracker;
 
-  await prepareDetector(quiet ? undefined : onProgress);
+  if (!graphModel) {
+    await prepareDetector(tracker);
+  }
 
   if (!graphModel) {
     throw new Error('El modelo no está listo');
   }
 
-  if (!quiet) {
-    onProgress?.({ message: 'Decodificando imagen…', percent: 62 });
-  }
+  tracker?.begin('decode', 'Decodificando imagen…');
   const { tensor, width, height } = imageToTensor(base64);
+  tracker?.complete(`Imagen lista (${width}×${height})`);
+
   const started = Date.now();
 
   try {
-    if (!quiet) {
-      onProgress?.({ message: 'Ejecutando reconocimiento Edge AI…', percent: 72 });
-    }
+    tracker?.begin('infer', 'Ejecutando reconocimiento Edge AI…');
     const predictions = await runDetection(graphModel, tensor, 20, 0.25);
     const inferenceMs = Date.now() - started;
+    tracker?.complete(`Inferencia terminada en ${inferenceMs} ms`);
 
-    if (!quiet) {
-      onProgress?.({ message: 'Filtrando detecciones…', percent: 92 });
-    }
+    tracker?.begin('filter', 'Filtrando detecciones…');
     const detections = toDetections(predictions, width, height, options?.minScore);
+    tracker?.complete(
+      detections.length > 0
+        ? `${detections.length} objeto${detections.length === 1 ? '' : 's'} detectado${detections.length === 1 ? '' : 's'}`
+        : 'Sin objetos en el umbral',
+    );
 
     return {
       detections,
@@ -242,7 +245,7 @@ function imageToTensor(base64: string) {
 }
 
 async function ensureLocalModel(
-  onShardProgress?: (copied: number, total: number) => void,
+  onShardProgress?: (copied: number, total: number, reused: boolean) => void,
 ): Promise<Directory> {
   const modelDir = new Directory(Paths.document, 'lens-model');
   const modelFile = new File(modelDir, 'model.json');
@@ -263,8 +266,10 @@ async function ensureLocalModel(
     const asset = assets[index];
     const shardName = `group1-shard${index + 1}of5`;
     const destination = new File(modelDir, shardName);
+    let reused = true;
 
     if (!destination.exists) {
+      reused = false;
       await asset.downloadAsync();
 
       if (!asset.localUri) {
@@ -276,36 +281,59 @@ async function ensureLocalModel(
     }
 
     copied += 1;
-    onShardProgress?.(copied, assets.length);
+    onShardProgress?.(copied, assets.length, reused);
   }
 
   return modelDir;
 }
 
-async function loadGraphModelFromDirectory(modelDir: Directory) {
+async function loadGraphModelFromDirectory(
+  modelDir: Directory,
+  onBytes?: (readBytes: number, totalBytes: number) => void,
+) {
   const modelFile = new File(modelDir, 'model.json');
   const modelJSON = JSON.parse(await modelFile.text()) as GraphModelJSON;
 
   const weightSpecs: tf.io.WeightsManifestEntry[] = [];
-  const chunks: Uint8Array[] = [];
+  const shardPaths: string[] = [];
 
   for (const group of modelJSON.weightsManifest) {
     weightSpecs.push(...group.weights);
-
-    for (const path of group.paths) {
-      const shard = new File(modelDir, path);
-      const bytes = await shard.bytes();
-      chunks.push(bytes);
-    }
+    shardPaths.push(...group.paths);
   }
 
-  const total = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
-  const weightData = new Uint8Array(total);
+  let totalBytes = 0;
+  for (const path of shardPaths) {
+    const shard = new File(modelDir, path);
+    const size = typeof shard.size === 'number' ? shard.size : 0;
+    totalBytes += size;
+  }
+
+  const chunks: Uint8Array[] = [];
+  let readBytes = 0;
+
+  for (let index = 0; index < shardPaths.length; index += 1) {
+    const shard = new File(modelDir, shardPaths[index]);
+    const bytes = await shard.bytes();
+    chunks.push(bytes);
+    readBytes += bytes.byteLength;
+
+    const estimatedTotal =
+      totalBytes > 0
+        ? totalBytes
+        : readBytes + Math.max(0, shardPaths.length - index - 1) * bytes.byteLength;
+
+    onBytes?.(readBytes, Math.max(estimatedTotal, readBytes));
+  }
+
+  const weightData = new Uint8Array(readBytes);
   let offset = 0;
   for (const chunk of chunks) {
     weightData.set(chunk, offset);
     offset += chunk.byteLength;
   }
+
+  onBytes?.(readBytes, readBytes);
 
   return tf.loadGraphModel(
     tf.io.fromMemory({

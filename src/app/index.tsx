@@ -21,17 +21,12 @@ export default function HomeScreen() {
     photoUri,
     stats,
     runPhotoScan,
-    startLive,
-    stopLive,
     resetToCamera,
   } = useObjectDetection(cameraRef);
 
   const permissionGranted = permission?.granted === true;
   const controlsDisabled =
-    !permissionGranted ||
-    !cameraReady ||
-    phase === 'loading' ||
-    phase === 'scanning';
+    !permissionGranted || !cameraReady || phase === 'loading' || phase === 'scanning';
 
   return (
     <View style={styles.root}>
@@ -65,10 +60,6 @@ export default function HomeScreen() {
           onPhotoScan={() => {
             void runPhotoScan();
           }}
-          onStartLive={() => {
-            void startLive();
-          }}
-          onStopLive={stopLive}
           onReset={resetToCamera}
         />
       </View>

@@ -43,7 +43,7 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "test": "npx --yes tsx --test src/utils/detection.test.ts",
+    "test": "npx --yes tsx --test src/utils/detection.test.ts src/utils/progress.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "private": true

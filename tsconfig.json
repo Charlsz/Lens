@@ -9,6 +9,6 @@
   ],
   "exclude": [
     "node_modules",
-    "**/detection.test.ts"
+    "**/*.test.ts"
   ]
 }

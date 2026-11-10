@@ -1,7 +1,7 @@
 import type { CameraView } from 'expo-camera';
 import * as ImageManipulator from 'expo-image-manipulator';
 
-import { INFERENCE_WIDTH, LIVE_INFERENCE_WIDTH } from '../constants/labels';
+import { INFERENCE_WIDTH } from '../constants/labels';
 
 export type CapturedFrame = {
   uri: string;
@@ -10,19 +10,14 @@ export type CapturedFrame = {
   height: number;
 };
 
-async function captureAndResize(
+/** Foto única: orientación correcta y calidad pensada para Edge AI. */
+export async function captureScanPhoto(
   camera: CameraView,
-  options: {
-    quality: number;
-    skipProcessing: boolean;
-    resizeWidth: number;
-    compress: number;
-  },
 ): Promise<CapturedFrame | null> {
   const photo = await camera.takePictureAsync({
-    quality: options.quality,
+    quality: 0.7,
     base64: false,
-    skipProcessing: options.skipProcessing,
+    skipProcessing: false,
     shutterSound: false,
   });
 
@@ -32,9 +27,9 @@ async function captureAndResize(
 
   const resized = await ImageManipulator.manipulateAsync(
     photo.uri,
-    [{ resize: { width: options.resizeWidth } }],
+    [{ resize: { width: INFERENCE_WIDTH } }],
     {
-      compress: options.compress,
+      compress: 0.82,
       format: ImageManipulator.SaveFormat.JPEG,
       base64: true,
     },
@@ -50,28 +45,4 @@ async function captureAndResize(
     width: resized.width,
     height: resized.height,
   };
-}
-
-/** Foto única: mejor calidad y orientación correcta. */
-export async function captureScanPhoto(
-  camera: CameraView,
-): Promise<CapturedFrame | null> {
-  return captureAndResize(camera, {
-    quality: 0.7,
-    skipProcessing: false,
-    resizeWidth: INFERENCE_WIDTH,
-    compress: 0.82,
-  });
-}
-
-/** Frame en vivo: más rápido y ligero. */
-export async function captureLiveFrame(
-  camera: CameraView,
-): Promise<CapturedFrame | null> {
-  return captureAndResize(camera, {
-    quality: 0.4,
-    skipProcessing: true,
-    resizeWidth: LIVE_INFERENCE_WIDTH,
-    compress: 0.6,
-  });
 }

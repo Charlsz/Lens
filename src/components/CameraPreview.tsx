@@ -54,7 +54,6 @@ export function CameraPreview({
 
   const showPhoto = Boolean(photoUri) && (phase === 'result' || phase === 'scanning');
   const showScanningOverlay = phase === 'scanning' || phase === 'loading';
-  const showLiveOverlay = phase === 'live';
 
   return (
     <View style={styles.frame}>
@@ -71,17 +70,12 @@ export function CameraPreview({
         <Image source={{ uri: photoUri }} style={FILL} resizeMode="cover" />
       ) : null}
 
-      <DetectionOverlay
-        detections={detections}
-        visible={phase === 'result' || phase === 'live'}
-      />
+      <DetectionOverlay detections={detections} visible={phase === 'result'} />
 
       <View style={styles.topRow}>
         <Text style={styles.brand}>Lens</Text>
-        <View style={[styles.badge, showLiveOverlay ? styles.badgeLive : null]}>
-          <Text style={[styles.badgeText, showLiveOverlay ? styles.badgeTextLive : null]}>
-            {showLiveOverlay ? 'En vivo' : 'Edge AI'}
-          </Text>
+        <View style={styles.badge}>
+          <Text style={styles.badgeText}>Edge AI</Text>
         </View>
       </View>
 
@@ -90,6 +84,9 @@ export function CameraPreview({
           <ActivityIndicator color="#7CFFB2" />
           <Text style={styles.loadingText}>{statusMessage}</Text>
           <Text style={styles.loadingPercent}>{progressPercent}%</Text>
+          <View style={styles.progressTrack}>
+            <View style={[styles.progressFill, { width: `${progressPercent}%` }]} />
+          </View>
         </View>
       ) : null}
     </View>
@@ -148,16 +145,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(124,255,178,0.35)',
   },
-  badgeLive: {
-    borderColor: 'rgba(255,107,107,0.55)',
-  },
   badgeText: {
     color: '#7CFFB2',
     fontFamily: 'DMSans_600SemiBold',
     fontSize: 12,
-  },
-  badgeTextLive: {
-    color: '#FF8E8E',
   },
   hiddenCamera: {
     opacity: 0,
@@ -179,6 +170,19 @@ const styles = StyleSheet.create({
   loadingPercent: {
     color: '#7CFFB2',
     fontFamily: 'DMSans_700Bold',
-    fontSize: 18,
+    fontSize: 22,
+  },
+  progressTrack: {
+    width: '70%',
+    height: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    overflow: 'hidden',
+    marginTop: 4,
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 999,
+    backgroundColor: '#7CFFB2',
   },
 });

@@ -2,11 +2,7 @@
 
 Reconocimiento de objetos con Edge AI en una aplicación móvil.
 
-Dos modos:
-- **Tomar foto**: captura una imagen y corre el modelo una vez
-- **En vivo**: analiza frames de la cámara en bucle hasta que detienes
-
-Todo corre en el dispositivo (sin nube).
+Toma una foto y Lens detecta objetos cotidianos en el propio teléfono (sin nube).
 
 ## Ejecutar
 
@@ -15,8 +11,6 @@ npm install
 npx expo start
 ```
 
-Escanea el QR con Expo Go (misma cuenta Expo en CLI y en la app).
-
 ## Verificar
 
 ```bash
@@ -24,13 +18,13 @@ npm run typecheck
 npm test
 ```
 
-## Stack
+## Flujo
 
-- Expo SDK 58 + React Native + TypeScript
-- Expo Camera
-- TensorFlow.js (CPU) + COCO-SSD lite MobileNet
-- Expo Router
+1. Cámara a pantalla completa
+2. **Tomar foto**
+3. Progreso real por etapa (copia de pesos, carga en MB, captura, inferencia)
+4. Resultado con cajas; **Nueva foto** vuelve a la cámara
 
-## Objetos detectados
+## Objetos
 
 Persona, teléfono, botella, portátil, libro, taza, mochila, silla.

@@ -7,21 +7,27 @@ type Props = {
 };
 
 export function PerformanceInfo({ stats }: Props) {
-  const seconds = (stats.elapsedMs / 1000).toFixed(1);
+  const totalSeconds = (stats.elapsedMs / 1000).toFixed(1);
+  const stageSeconds = (stats.stageElapsedMs / 1000).toFixed(1);
   const inference =
-    stats.lastInferenceMs > 0 ? `${stats.lastInferenceMs} ms` : `${stats.progressPercent}%`;
+    stats.lastInferenceMs > 0 ? `${stats.lastInferenceMs} ms` : `${stageSeconds} s etapa`;
 
   return (
     <View style={styles.wrap}>
       <View style={styles.metricsRow}>
-        <Metric label="Tiempo" value={`${seconds} s`} />
+        <Metric label="Tiempo" value={`${totalSeconds} s`} />
         <Metric label="Objetos" value={`${stats.objectCount}`} />
+        <Metric label="Avance" value={`${stats.progressPercent}%`} />
+      </View>
+
+      <View style={styles.metricsRow}>
         <Metric label="Inferencia" value={inference} />
+        <Metric label="Etapa" value={`${stageSeconds} s`} />
       </View>
 
       <View style={styles.statusBlock}>
         <Text style={styles.statusLabel}>Estado</Text>
-        <Text style={styles.statusValue} numberOfLines={2}>
+        <Text style={styles.statusValue} numberOfLines={3}>
           {stats.statusMessage}
         </Text>
         <View style={styles.progressTrack}>
@@ -68,7 +74,7 @@ const styles = StyleSheet.create({
   value: {
     color: '#F4FFF8',
     fontFamily: 'DMSans_600SemiBold',
-    fontSize: 15,
+    fontSize: 14,
   },
   statusBlock: {
     gap: 6,

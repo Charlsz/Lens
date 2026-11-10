@@ -58,7 +58,7 @@ describe('toDetections', () => {
     assert.deepEqual(toDetections(predictions, 0, 400), []);
   });
 
-  it('respeta el umbral del modo en vivo', () => {
+  it('respeta un umbral personalizado', () => {
     const detections = toDetections(
       [
         { bbox: [1, 1, 10, 10], class: 'cup', score: 0.35 },
@@ -73,6 +73,7 @@ describe('toDetections', () => {
     assert.equal(detections[0].className, 'book');
   });
 });
+
 
 describe('format helpers', () => {
   it('formatea porcentaje, tiempo y conteo en español', () => {
