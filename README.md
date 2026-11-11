@@ -4,7 +4,7 @@ Reconocimiento de objetos con Edge AI en una aplicación móvil.
 
 Toma una foto y Lens detecta objetos cotidianos en el propio teléfono (sin nube).
 
-presentación: https://uninorte-my.sharepoint.com/:p:/g/personal/galvisca_uninorte_edu_co/IQB4DDv7tM1ER6TPyuhjAeIQAQy_ZFkP3kZspokfVvc6BIA?e=yUETLu
+presentación: https://uninorte-my.sharepoint.com/:p:/g/personal/galvisca_uninorte_edu_co/IQADwzWWcLOCSIM9T7QRzHNhASNGQQzD73em1HYQvCrfug4?e=PLilEB
 
 ## Ejecutar
 
