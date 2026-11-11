@@ -6,6 +6,8 @@ Toma una foto y Lens detecta objetos cotidianos en el propio teléfono (sin nube
 
 presentación: https://uninorte-my.sharepoint.com/:p:/g/personal/galvisca_uninorte_edu_co/IQADwzWWcLOCSIM9T7QRzHNhASNGQQzD73em1HYQvCrfug4?e=PLilEB
 
+https://uninorte-my.sharepoint.com/:p:/g/personal/galvisca_uninorte_edu_co/IQADwzWWcLOCSIM9T7QRzHNhASNGQQzD73em1HYQvCrfug4?e=35GnLF
+
 ## Ejecutar
 
 ```bash
