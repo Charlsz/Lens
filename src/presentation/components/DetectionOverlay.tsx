@@ -1,7 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 
-import type { Detection } from '../utils/detection';
-import { formatPercent } from '../utils/detection';
+import { formatPercent } from '../../domain/detection/formatters';
+import type { Detection } from '../../domain/entities/Detection';
 
 type Props = {
   detections: Detection[];

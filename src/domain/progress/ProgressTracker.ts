@@ -13,6 +13,16 @@ export type ProgressStage =
   | 'infer'
   | 'filter';
 
+export type ProgressMode = 'boot' | 'scan' | 'full';
+
+export interface ProgressReporter {
+  begin(stage: ProgressStage, message: string): void;
+  setFraction(fraction: number, message: string): void;
+  complete(message?: string): void;
+  finish(message: string): void;
+  dispose(): void;
+}
+
 type StageRange = { start: number; end: number; estimateMs: number };
 
 const BOOT_RANGES: Record<
@@ -46,15 +56,13 @@ const FULL_RANGES: Record<ProgressStage, StageRange> = {
   filter: { start: 96, end: 100, estimateMs: 200 },
 };
 
-export type ProgressMode = 'boot' | 'scan' | 'full';
-
 type Listener = (update: ProgressUpdate) => void;
 
 /**
  * Progreso basado en etapas reales + fracción medida (bytes/archivos)
  * y un latido por tiempo solo dentro del rango de la etapa activa.
  */
-export class ProgressTracker {
+export class ProgressTracker implements ProgressReporter {
   private mode: ProgressMode;
   private listener: Listener;
   private stage: ProgressStage | null = null;

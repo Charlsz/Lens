@@ -8,8 +8,8 @@ import {
 } from 'react-native';
 import { CameraView } from 'expo-camera';
 
-import type { AppPhase } from '../hooks/useObjectDetection';
-import type { Detection } from '../utils/detection';
+import type { Detection } from '../../domain/entities/Detection';
+import type { AppPhase } from '../types/scan';
 import { DetectionOverlay } from './DetectionOverlay';
 
 const FILL = {

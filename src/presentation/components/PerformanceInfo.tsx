@@ -1,6 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native';
 
-import type { ScanStats } from '../hooks/useObjectDetection';
+import type { ScanStats } from '../types/scan';
 
 type Props = {
   stats: ScanStats;

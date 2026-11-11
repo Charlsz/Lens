@@ -1,14 +1,9 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import {
-  formatElapsed,
-  formatObjectCount,
-  formatPercent,
-  isTargetClass,
-  toDetections,
-  type RawPrediction,
-} from './detection';
+import { formatElapsed, formatObjectCount, formatPercent } from './formatters';
+import { isTargetClass, toDetections } from './mapPredictions';
+import type { RawPrediction } from '../entities/Detection';
 
 describe('isTargetClass', () => {
   it('acepta clases objetivo en inglés del modelo', () => {
@@ -73,7 +68,6 @@ describe('toDetections', () => {
     assert.equal(detections[0].className, 'book');
   });
 });
-
 
 describe('format helpers', () => {
   it('formatea porcentaje, tiempo y conteo en español', () => {

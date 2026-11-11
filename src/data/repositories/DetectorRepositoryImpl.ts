@@ -4,10 +4,14 @@ import * as tf from '@tensorflow/tfjs';
 import { toByteArray } from 'base64-js';
 import * as jpeg from 'jpeg-js';
 
-import type { Detection, RawPrediction } from '../utils/detection';
-import { toDetections } from '../utils/detection';
-import { formatBytes, type ProgressTracker } from '../utils/progress';
-import { ensureTfPlatform } from './tfPlatform';
+import { toDetections } from '../../domain/detection/mapPredictions';
+import type { DetectionResult, RawPrediction } from '../../domain/entities/Detection';
+import { formatBytes, type ProgressReporter } from '../../domain/progress/ProgressTracker';
+import type {
+  DetectObjectsOptions,
+  DetectorRepository,
+} from '../../domain/repositories/DetectorRepository';
+import { ensureTfPlatform } from '../tf/tfPlatform';
 
 // COCO label map used by the SSD model (same as @tensorflow-models/coco-ssd).
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -16,14 +20,14 @@ const { CLASSES } = require('@tensorflow-models/coco-ssd/dist/classes') as {
 };
 
 const SHARD_MODULES = [
-  require('../../assets/model/group1-shard1of5.bin'),
-  require('../../assets/model/group1-shard2of5.bin'),
-  require('../../assets/model/group1-shard3of5.bin'),
-  require('../../assets/model/group1-shard4of5.bin'),
-  require('../../assets/model/group1-shard5of5.bin'),
+  require('../../../assets/model/group1-shard1of5.bin'),
+  require('../../../assets/model/group1-shard2of5.bin'),
+  require('../../../assets/model/group1-shard3of5.bin'),
+  require('../../../assets/model/group1-shard4of5.bin'),
+  require('../../../assets/model/group1-shard5of5.bin'),
 ] as const;
 
-const MODEL_JSON = require('../../assets/model/model.json') as GraphModelJSON;
+const MODEL_JSON = require('../../../assets/model/model.json') as GraphModelJSON;
 
 type GraphModelJSON = {
   format?: string;
@@ -36,111 +40,102 @@ type GraphModelJSON = {
   }>;
 };
 
-let graphModel: tf.GraphModel | null = null;
-let readyPromise: Promise<void> | null = null;
+export class DetectorRepositoryImpl implements DetectorRepository {
+  private graphModel: tf.GraphModel | null = null;
+  private readyPromise: Promise<void> | null = null;
 
-export async function prepareDetector(tracker?: ProgressTracker): Promise<void> {
-  if (graphModel) {
-    return;
-  }
+  async prepare(tracker?: ProgressReporter): Promise<void> {
+    if (this.graphModel) {
+      return;
+    }
 
-  if (!readyPromise) {
-    readyPromise = (async () => {
-      tracker?.begin('tf_init', 'Inicializando TensorFlow.js…');
-      ensureTfPlatform();
-      await tf.setBackend('cpu');
-      await tf.ready();
-      tracker?.complete('TensorFlow.js listo');
+    if (!this.readyPromise) {
+      this.readyPromise = (async () => {
+        tracker?.begin('tf_init', 'Inicializando TensorFlow.js…');
+        ensureTfPlatform();
+        await tf.setBackend('cpu');
+        await tf.ready();
+        tracker?.complete('TensorFlow.js listo');
 
-      tracker?.begin('copy_shards', 'Preparando archivos del modelo…');
-      const modelDir = await ensureLocalModel((copied, total, reused) => {
-        tracker?.setFraction(
-          copied / total,
-          reused
-            ? `Pesos en caché (${copied}/${total})`
-            : `Copiando pesos del modelo (${copied}/${total})…`,
-        );
+        tracker?.begin('copy_shards', 'Preparando archivos del modelo…');
+        const modelDir = await ensureLocalModel((copied, total, reused) => {
+          tracker?.setFraction(
+            copied / total,
+            reused
+              ? `Pesos en caché (${copied}/${total})`
+              : `Copiando pesos del modelo (${copied}/${total})…`,
+          );
+        });
+        tracker?.complete('Archivos del modelo listos');
+
+        tracker?.begin('load_weights', 'Cargando modelo Edge AI en memoria…');
+        this.graphModel = await loadGraphModelFromDirectory(modelDir, (readBytes, totalBytes) => {
+          tracker?.setFraction(
+            totalBytes > 0 ? readBytes / totalBytes : 0,
+            `Cargando pesos ${formatBytes(readBytes)} / ${formatBytes(totalBytes)}`,
+          );
+        });
+        tracker?.complete('Modelo cargado en memoria');
+
+        tracker?.begin('warmup', 'Calentando modelo (primera inferencia)…');
+        const warm = tf.zeros([1, 300, 300, 3], 'int32');
+        const warmResult = (await this.graphModel.executeAsync(warm)) as tf.Tensor[];
+        warmResult.forEach((tensor) => tensor.dispose());
+        warm.dispose();
+        tracker?.complete('Calentamiento terminado');
+      })().catch((error) => {
+        this.readyPromise = null;
+        throw error;
       });
-      tracker?.complete('Archivos del modelo listos');
+    }
 
-      tracker?.begin('load_weights', 'Cargando modelo Edge AI en memoria…');
-      graphModel = await loadGraphModelFromDirectory(modelDir, (readBytes, totalBytes) => {
-        tracker?.setFraction(
-          totalBytes > 0 ? readBytes / totalBytes : 0,
-          `Cargando pesos ${formatBytes(readBytes)} / ${formatBytes(totalBytes)}`,
-        );
-      });
-      tracker?.complete('Modelo cargado en memoria');
-
-      tracker?.begin('warmup', 'Calentando modelo (primera inferencia)…');
-      const warm = tf.zeros([1, 300, 300, 3], 'int32');
-      const warmResult = (await graphModel.executeAsync(warm)) as tf.Tensor[];
-      warmResult.forEach((tensor) => tensor.dispose());
-      warm.dispose();
-      tracker?.complete('Calentamiento terminado');
-    })().catch((error) => {
-      readyPromise = null;
-      throw error;
-    });
+    await this.readyPromise;
   }
 
-  await readyPromise;
-}
-
-export function isDetectorReady() {
-  return graphModel !== null;
-}
-
-export async function detectObjects(
-  base64: string,
-  options?: {
-    tracker?: ProgressTracker;
-    minScore?: number;
-  },
-): Promise<{
-  detections: Detection[];
-  inferenceMs: number;
-  imageWidth: number;
-  imageHeight: number;
-}> {
-  const tracker = options?.tracker;
-
-  if (!graphModel) {
-    await prepareDetector(tracker);
+  isReady(): boolean {
+    return this.graphModel !== null;
   }
 
-  if (!graphModel) {
-    throw new Error('El modelo no está listo');
-  }
+  async detect(base64: string, options?: DetectObjectsOptions): Promise<DetectionResult> {
+    const tracker = options?.tracker;
 
-  tracker?.begin('decode', 'Decodificando imagen…');
-  const { tensor, width, height } = imageToTensor(base64);
-  tracker?.complete(`Imagen lista (${width}×${height})`);
+    if (!this.graphModel) {
+      await this.prepare(tracker);
+    }
 
-  const started = Date.now();
+    if (!this.graphModel) {
+      throw new Error('El modelo no está listo');
+    }
 
-  try {
-    tracker?.begin('infer', 'Ejecutando reconocimiento Edge AI…');
-    const predictions = await runDetection(graphModel, tensor, 20, 0.25);
-    const inferenceMs = Date.now() - started;
-    tracker?.complete(`Inferencia terminada en ${inferenceMs} ms`);
+    tracker?.begin('decode', 'Decodificando imagen…');
+    const { tensor, width, height } = imageToTensor(base64);
+    tracker?.complete(`Imagen lista (${width}×${height})`);
 
-    tracker?.begin('filter', 'Filtrando detecciones…');
-    const detections = toDetections(predictions, width, height, options?.minScore);
-    tracker?.complete(
-      detections.length > 0
-        ? `${detections.length} objeto${detections.length === 1 ? '' : 's'} detectado${detections.length === 1 ? '' : 's'}`
-        : 'Sin objetos en el umbral',
-    );
+    const started = Date.now();
 
-    return {
-      detections,
-      inferenceMs,
-      imageWidth: width,
-      imageHeight: height,
-    };
-  } finally {
-    tensor.dispose();
+    try {
+      tracker?.begin('infer', 'Ejecutando reconocimiento Edge AI…');
+      const predictions = await runDetection(this.graphModel, tensor, 20, 0.25);
+      const inferenceMs = Date.now() - started;
+      tracker?.complete(`Inferencia terminada en ${inferenceMs} ms`);
+
+      tracker?.begin('filter', 'Filtrando detecciones…');
+      const detections = toDetections(predictions, width, height, options?.minScore);
+      tracker?.complete(
+        detections.length > 0
+          ? `${detections.length} objeto${detections.length === 1 ? '' : 's'} detectado${detections.length === 1 ? '' : 's'}`
+          : 'Sin objetos en el umbral',
+      );
+
+      return {
+        detections,
+        inferenceMs,
+        imageWidth: width,
+        imageHeight: height,
+      };
+    } finally {
+      tensor.dispose();
+    }
   }
 }
 

@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import type { AppPhase } from '../hooks/useObjectDetection';
+import type { AppPhase } from '../types/scan';
 
 type Props = {
   phase: AppPhase;

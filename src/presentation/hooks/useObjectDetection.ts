@@ -1,32 +1,14 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import type { CameraView } from 'expo-camera';
 
-import { MIN_SCORE } from '../constants/labels';
-import { captureScanPhoto } from '../services/camera';
-import { detectObjects, isDetectorReady, prepareDetector } from '../services/detector';
-import type { Detection } from '../utils/detection';
-import { formatObjectCount } from '../utils/detection';
-import { ProgressTracker, type ProgressUpdate } from '../utils/progress';
-
-export type AppPhase = 'loading' | 'ready' | 'scanning' | 'result' | 'error';
-
-export type ScanStats = {
-  elapsedMs: number;
-  objectCount: number;
-  statusMessage: string;
-  progressPercent: number;
-  lastInferenceMs: number;
-  stageElapsedMs: number;
-};
-
-const IDLE_STATS: ScanStats = {
-  elapsedMs: 0,
-  objectCount: 0,
-  statusMessage: 'Listo para tomar una foto',
-  progressPercent: 0,
-  lastInferenceMs: 0,
-  stageElapsedMs: 0,
-};
+import { prepareDetectorUseCase, scanPhotoUseCase } from '../../di/container';
+import { formatObjectCount } from '../../domain/detection/formatters';
+import type { Detection } from '../../domain/entities/Detection';
+import {
+  ProgressTracker,
+  type ProgressUpdate,
+} from '../../domain/progress/ProgressTracker';
+import { IDLE_STATS, type AppPhase, type ScanStats } from '../types/scan';
 
 export function useObjectDetection(cameraRef: RefObject<CameraView | null>) {
   const [phase, setPhase] = useState<AppPhase>('loading');
@@ -102,7 +84,8 @@ export function useObjectDetection(cameraRef: RefObject<CameraView | null>) {
     const tracker = createTracker('boot');
     startElapsedTimer();
 
-    prepareDetector(tracker)
+    prepareDetectorUseCase
+      .execute(tracker)
       .then(() => {
         if (!cancelled) {
           tracker.finish('Modelo Edge AI listo');
@@ -149,7 +132,7 @@ export function useObjectDetection(cameraRef: RefObject<CameraView | null>) {
     setPhotoUri(null);
     setDetections([]);
     setErrorMessage(null);
-    setPhase(isDetectorReady() ? 'ready' : 'loading');
+    setPhase(prepareDetectorUseCase.isReady() ? 'ready' : 'loading');
     setStats(IDLE_STATS);
   }, [stopElapsedTimer]);
 
@@ -170,7 +153,7 @@ export function useObjectDetection(cameraRef: RefObject<CameraView | null>) {
     setPhotoUri(null);
     setErrorMessage(null);
 
-    const needsModel = !isDetectorReady();
+    const needsModel = !prepareDetectorUseCase.isReady();
     const tracker = createTracker(needsModel ? 'full' : 'scan');
     startElapsedTimer();
     applyProgress({
@@ -179,22 +162,7 @@ export function useObjectDetection(cameraRef: RefObject<CameraView | null>) {
     });
 
     try {
-      if (needsModel) {
-        await prepareDetector(tracker);
-      }
-
-      tracker.begin('capture', 'Tomando foto…');
-      const frame = await captureScanPhoto(camera);
-      if (!frame) {
-        throw new Error('No se pudo capturar la foto');
-      }
-      tracker.complete('Foto capturada');
-      setPhotoUri(frame.uri);
-
-      const result = await detectObjects(frame.base64, {
-        tracker,
-        minScore: MIN_SCORE,
-      });
+      const result = await scanPhotoUseCase.execute({ camera, tracker });
 
       const totalMs = scanStartedAtRef.current
         ? Date.now() - scanStartedAtRef.current
@@ -206,6 +174,7 @@ export function useObjectDetection(cameraRef: RefObject<CameraView | null>) {
           : 'Listo · sin objetos detectados',
       );
       stopElapsedTimer();
+      setPhotoUri(result.frame.uri);
       setDetections(result.detections);
       setPhase('result');
       setStats({

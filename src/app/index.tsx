@@ -3,10 +3,10 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { CameraPreview } from '../components/CameraPreview';
-import { DetectionControls } from '../components/DetectionControls';
-import { PerformanceInfo } from '../components/PerformanceInfo';
-import { useObjectDetection } from '../hooks/useObjectDetection';
+import { CameraPreview } from '../presentation/components/CameraPreview';
+import { DetectionControls } from '../presentation/components/DetectionControls';
+import { PerformanceInfo } from '../presentation/components/PerformanceInfo';
+import { useObjectDetection } from '../presentation/hooks/useObjectDetection';
 
 export default function HomeScreen() {
   const cameraRef = useRef<CameraView>(null);

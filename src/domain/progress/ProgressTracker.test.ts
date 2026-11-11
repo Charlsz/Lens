@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { formatBytes, ProgressTracker, type ProgressUpdate } from './progress';
+import { formatBytes, ProgressTracker, type ProgressUpdate } from './ProgressTracker';
 
 describe('formatBytes', () => {
   it('formatea bytes legibles', () => {

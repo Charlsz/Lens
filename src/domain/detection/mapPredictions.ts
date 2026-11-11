@@ -4,26 +4,8 @@ import {
   MIN_SCORE,
   TARGET_CLASSES,
   type TargetClass,
-} from '../constants/labels';
-
-export type RawPrediction = {
-  bbox: [number, number, number, number];
-  class: string;
-  score: number;
-};
-
-export type Detection = {
-  id: string;
-  label: string;
-  className: TargetClass;
-  score: number;
-  box: {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  };
-};
+} from '../config/detectionConfig';
+import type { Detection, RawPrediction } from '../entities/Detection';
 
 export function isTargetClass(value: string): value is TargetClass {
   return (TARGET_CLASSES as readonly string[]).includes(value);
@@ -64,16 +46,4 @@ export function toDetections(
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
-}
-
-export function formatPercent(score: number) {
-  return `${Math.round(score * 100)}%`;
-}
-
-export function formatElapsed(ms: number) {
-  return `${(ms / 1000).toFixed(1)} s`;
-}
-
-export function formatObjectCount(count: number) {
-  return count === 1 ? '1 objeto' : `${count} objetos`;
 }
